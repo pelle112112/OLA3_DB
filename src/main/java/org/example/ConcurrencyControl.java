@@ -3,6 +3,10 @@ package org.example;
 import com.mysql.cj.protocol.Resultset;
 
 import java.sql.*;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 
 public class ConcurrencyControl {
@@ -10,8 +14,9 @@ public class ConcurrencyControl {
     private static final String USER = "devtester";
     private static final String PASSWORD = "testuser";
 
+
 // 1. Implement Optimistic Concurrency Control for Tournament Updates
-    public static void changeStartDateTournament (int tournamentId, String newStartDate) {
+    public static boolean changeStartDateTournament (int tournamentId, String newStartDate) throws Exception {
         try (Connection conn = DriverManager.getConnection(URL, USER, PASSWORD)) {
             conn.setAutoCommit(false);
 
@@ -25,7 +30,7 @@ public class ConcurrencyControl {
 
                 if (!rs.next()) {
                     System.out.println("Tournament not found.");
-                    return;
+                    return false;
                 }
                 currentVersion = rs.getInt("version");
 
@@ -42,17 +47,19 @@ public class ConcurrencyControl {
                 if (rowsAffected == 0) {
                     System.out.println("Optimistic locking failed. The tournament was modified by another transaction. Please try again.");
                     conn.rollback();
+                    throw new Exception("Optimistic locking failed.");
                 } else {
                     conn.commit();
                     System.out.println("Tournament start date changed successfully.");
+
+                    return true;
                 }
             }
 
 
-            System.out.println("Tournament start date changed successfully.");
-
         } catch (SQLException e) {
             System.err.println("Database error: " + e.getMessage());
+            return false;
         }
     }
 // 2. Implement Pessimistic Concurrency Control for Match Updates
@@ -99,6 +106,7 @@ public class ConcurrencyControl {
                 CallableStatement stmt = conn.prepareCall("{CALL joinTournament(?, ?)}");
                 stmt.setInt(1, playerId);
                 stmt.setInt(2, tournamentId);
+                stmt.execute();
                 PreparedStatement updateRanking = conn.prepareStatement("UPDATE players SET ranking = ranking + 10 WHERE player_id = ?");
                 updateRanking.setInt(1, playerId);
                 updateRanking.executeUpdate();
@@ -126,12 +134,16 @@ public class ConcurrencyControl {
                 PreparedStatement lockStmtMatches = conn.prepareStatement("SELECT * FROM matches WHERE match_id = ? FOR UPDATE");
                 lockStmtMatches.setInt(1, match_id);
                 ResultSet rs  = lockStmtMatches.executeQuery();
-
+                if (!rs.next()) {
+                    System.out.println("Match ID not found: " + match_id);
+                    conn.rollback();
+                    return;
+                }
 
                 int player1_id = rs.getInt("player1_id");
                 int player2_id = rs.getInt("player2_id");
 
-                PreparedStatement lockStmtPlayers = conn.prepareStatement("SELECT * FROM players WHERE player_id = ? OR ? FOR UPDATE");
+                PreparedStatement lockStmtPlayers = conn.prepareStatement("SELECT * FROM players WHERE player_id = ? OR player_id = ? FOR UPDATE");
                 lockStmtPlayers.setInt(1, player1_id);
                 lockStmtPlayers.setInt(2, player2_id);
                 lockStmtPlayers.executeQuery();
@@ -141,16 +153,129 @@ public class ConcurrencyControl {
                 stmt.setInt(2, winner_id);
                 stmt.execute();
                 conn.commit();
+                System.out.println("Match result submitted successfully.");
+
 
 
             }
             catch (SQLException e){
                 System.out.println("Something went wrong when committing changes" + e.getMessage());
                 conn.rollback();
+
+                throw new RuntimeException(e);
             }
 
         } catch (SQLException e) {
             System.err.println("Database error when creating a connection: " + e.getMessage());
         }
+    }
+    public static void performanceTestOptimistic (){
+        ExecutorService executor = Executors.newFixedThreadPool(50);
+        for (int i = 0; i < 50; i++) {
+            executor.submit(() -> {
+                boolean success = false;
+                long startTime = System.currentTimeMillis();
+
+                while (!success) {
+                //    success = changeStartDateTournament(1, "2021-12-01");
+                }
+                long endTime = System.currentTimeMillis();
+
+                System.out.println("Time taken: " + (endTime - startTime) + "ms");
+
+        });
+        }
+        executor.shutdown();
+
+    }
+    public static void performanceTestPessimistic (){
+        ExecutorService executor = Executors.newFixedThreadPool(50);
+        for (int i = 0; i < 50; i++) {
+
+            executor.submit(() -> {
+                long startTime = System.currentTimeMillis();
+                submitMatchResult(3, 1);
+
+                long endTime = System.currentTimeMillis();
+
+                System.out.println("Time taken: " + (endTime - startTime) + "ms");
+
+            });
+        }
+        executor.shutdown();
+
+    }
+        public static void performanceTestPessimisticTracker(int threads) throws InterruptedException {
+            ExecutorService executor = Executors.newFixedThreadPool(threads);
+            AtomicInteger attempts = new AtomicInteger(0);
+            AtomicInteger failures = new AtomicInteger(0);
+
+            for (int i = 0; i < threads; i++) {
+                executor.submit(() -> {
+                    attempts.incrementAndGet(); // Track attempt
+                    long startTime = System.currentTimeMillis();
+
+                    try {
+                        // Simulated method that might fail
+                        submitMatchResult(3, 1);
+                    } catch (Exception e) {
+                        failures.incrementAndGet(); // Track failure
+                    }
+
+                    long endTime = System.currentTimeMillis();
+                    System.out.println("Time taken: " + (endTime - startTime) + "ms");
+                });
+            }
+
+            executor.shutdown(); // Prevent new tasks from being submitted
+
+            try {
+                if (!executor.awaitTermination(10, TimeUnit.SECONDS)) { // Wait for all tasks to complete
+                    System.out.println("Some tasks did not finish in time.");
+                }
+            } catch (InterruptedException e) {
+                System.err.println("Executor interrupted: " + e.getMessage());
+            }
+
+            // Print final results after all tasks are completed
+            System.out.println("Total attempts: " + attempts.get());
+            System.out.println("Total failures: " + failures.get());
+        }
+
+
+    public static void performanceTestOptimisticTracker(int threads) throws InterruptedException {
+        ExecutorService executor = Executors.newFixedThreadPool(threads);
+        AtomicInteger attempts = new AtomicInteger(0);
+        AtomicInteger failures = new AtomicInteger(0);
+
+        for (int i = 0; i < threads; i++) {
+            executor.submit(() -> {
+                attempts.incrementAndGet(); // Track attempt
+                long startTime = System.currentTimeMillis();
+
+                try {
+                    // Simulated method that might fail
+                         changeStartDateTournament(1, "2021-12-01");
+                } catch (Exception e) {
+                    failures.incrementAndGet(); // Track failure
+                }
+
+                long endTime = System.currentTimeMillis();
+                System.out.println("Time taken: " + (endTime - startTime) + "ms");
+            });
+        }
+        executor.shutdown(); // Prevent new tasks from being submitted
+
+        try {
+            if (!executor.awaitTermination(10, TimeUnit.SECONDS)) { // Wait for all tasks to complete
+                System.out.println("Some tasks did not finish in time.");
+            }
+        } catch (InterruptedException e) {
+            System.err.println("Executor interrupted: " + e.getMessage());
+        }
+
+        // Print final results after all tasks are completed
+        System.out.println("Total attempts: " + attempts.get());
+        System.out.println("Total failures: " + failures.get());
     }
 }
