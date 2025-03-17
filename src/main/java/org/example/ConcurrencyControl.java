@@ -94,15 +94,18 @@ public class ConcurrencyControl {
                 conn.setAutoCommit(false);
                 PreparedStatement lockstmt = conn.prepareStatement("SELECT * FROM players WHERE player_id = ? FOR UPDATE");
                 lockstmt.setInt(1, playerId);
-                lockstmt.executeQuery();
+                lockstmt.execute();
 
                 CallableStatement stmt = conn.prepareCall("{CALL joinTournament(?, ?)}");
                 stmt.setInt(1, playerId);
                 stmt.setInt(2, tournamentId);
                 PreparedStatement updateRanking = conn.prepareStatement("UPDATE players SET ranking = ranking + 10 WHERE player_id = ?");
                 updateRanking.setInt(1, playerId);
+                updateRanking.executeUpdate();
+
 
                 conn.commit();
+                System.out.println("Player " + playerId + " joined tournament " + tournamentId + " successfully.");
 
             } catch (SQLException e) {
                 System.err.println("Database error when committing changes: " + e.getMessage());
@@ -136,6 +139,7 @@ public class ConcurrencyControl {
                 CallableStatement stmt = conn.prepareCall("{CALL submitMatchResult(?, ?)}");
                 stmt.setInt(1, match_id);
                 stmt.setInt(2, winner_id);
+                stmt.execute();
                 conn.commit();
 
 
