@@ -99,6 +99,7 @@ public class ConcurrencyControl {
                 CallableStatement stmt = conn.prepareCall("{CALL joinTournament(?, ?)}");
                 stmt.setInt(1, playerId);
                 stmt.setInt(2, tournamentId);
+                stmt.execute();
                 PreparedStatement updateRanking = conn.prepareStatement("UPDATE players SET ranking = ranking + 10 WHERE player_id = ?");
                 updateRanking.setInt(1, playerId);
                 updateRanking.executeUpdate();
