@@ -169,6 +169,60 @@ public class ConcurrencyControl {
             System.err.println("Database error when creating a connection: " + e.getMessage());
         }
     }
+
+    public static void submitMatchResultV2 (int match_id, int winner_id) {
+        try (Connection conn = DriverManager.getConnection(URL, USER, PASSWORD)) {
+            try{
+                CallableStatement stmt = conn.prepareCall("{CALL submitMatchResult2(?, ?)}");
+                stmt.setInt(1, match_id);
+                stmt.setInt(2, winner_id);
+                stmt.execute();
+                System.out.println("Match result submitted successfully.");
+            }
+            catch (SQLException e){
+                System.out.println("Something went wrong when committing changes " + e.getMessage());
+                throw new RuntimeException(e);
+            }
+
+        } catch (SQLException e) {
+            System.err.println("Database error when creating a connection: " + e.getMessage());
+        }
+    }
+
+    public static void submitMatchResultV2Test (int match_id, int winner_id) {
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        for(int i = 0; i < 2; i++){
+            executor.submit(() -> {
+                submitMatchResultV2(match_id, winner_id);
+            });
+        }
+        executor.shutdown();
+    }
+
+    public static void testTournamentRegistrationsLastSpot(int playerId, int tournamentId){
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        for(int i = playerId; i < playerId + 2; i++){
+            int finalI = i;
+            executor.submit(() -> {
+                // insert different delay for the 2 threads
+                try {
+                    Thread.sleep(finalI * 500);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+                try(Connection conn = DriverManager.getConnection(URL, USER, PASSWORD)) {
+                    CallableStatement stmt = conn.prepareCall("{CALL joinTournament(?, ?)}");
+                    stmt.setInt(1, finalI);
+                    stmt.setInt(2, tournamentId);
+                    stmt.execute();
+                } catch (SQLException e) {
+                    System.err.println("Database message: " + e.getMessage());
+                }
+            });
+        }
+        executor.shutdown();
+    }
+
     public static void performanceTestOptimistic (){
         ExecutorService executor = Executors.newFixedThreadPool(50);
         for (int i = 0; i < 50; i++) {
