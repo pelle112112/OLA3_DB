@@ -3,6 +3,7 @@
 ## Part 1 Optimistic & Pessimistic Concurrency Control
 
 ### DATABASE CREATION SCRIPT
+
 ```sql
 CREATE DATABASE  IF NOT EXISTS `esport`;
 USE `esport`;
@@ -71,27 +72,27 @@ DELIMITER $$
 
 CREATE TRIGGER set_created_at
 BEFORE INSERT ON players
-FOR EACH ROW 
+FOR EACH ROW
 BEGIN
     IF NEW.created_at IS NULL THEN
 		SET NEW.created_at = NOW();
 	END IF;
 END $$
 
-DELIMITER ; 
+DELIMITER ;
 
 DELIMITER $$
 
 CREATE TRIGGER set_created_at_tournaments
 BEFORE INSERT ON tournaments
-FOR EACH ROW 
+FOR EACH ROW
 BEGIN
     IF NEW.created_at IS NULL THEN
 		SET NEW.created_at = NOW();
 	END IF;
 END $$
 
-DELIMITER ; 
+DELIMITER ;
 
 DELIMITER //
 create trigger beforeInsertRegistration
@@ -118,13 +119,13 @@ create trigger afterInsertMatch
 after update on matches
 for each row
 begin
-    
+
     DECLARE player1_ranking INT;
     DECLARE player2_ranking INT;
-    
+
     SELECT RANKING INTO player1_ranking FROM players WHERE player_id = new.player1_id;
     SELECT RANKING INTO player2_ranking FROM players WHERE player_id = new.player2_id;
-    
+
     if new.winner_id = new.player1_id then
 		update players set ranking = ranking + 10 where player_id = new.player1_id;
         if player2_ranking >= 10 then
@@ -192,17 +193,17 @@ BEGIN
 
 	DECLARE p_player1_id INT;
     DECLARE p_player2_id INT;
-    
+
     SELECT player1_id, player2_id
     INTO p_player1_id, p_player2_id
     FROM matches
     WHERE match_id = p_match_id;
-    
+
     IF p_winner_id = p_player1_id or p_winner_id = p_player2_id THEN
         UPDATE matches
         SET winner_id = p_winner_id
         WHERE match_id = p_match_id;
-        
+
         if p_winner_id = p_player1_id then
 			update players set ranking = ranking + 10 where player_id = p_player1_id;
 			update players set ranking = ranking - 10 where player_id = p_player2_id;
@@ -261,20 +262,20 @@ DELIMITER ;
 
 -- Test data:
 
-INSERT INTO esport.players(username, email, ranking) 
-VALUES 
-('maverick', 'm@test.dk', 0), 
-('gobsmacked', 'g@test.dk', 100), 
-('flume', 'f@test.dk', 200), 
-('ranivorous', 'r@test.dk', 150), 
-('phalange', 'p@test.dk', 2000), 
-('sprout','s@test.dk', 175), 
+INSERT INTO esport.players(username, email, ranking)
+VALUES
+('maverick', 'm@test.dk', 0),
+('gobsmacked', 'g@test.dk', 100),
+('flume', 'f@test.dk', 200),
+('ranivorous', 'r@test.dk', 150),
+('phalange', 'p@test.dk', 2000),
+('sprout','s@test.dk', 175),
 ('bulbous', 'b@test.dk', 50),
 ('drizzle', 'd@test.dk', 0),
 ('wharf', 'w@test.dk', 80),
 ('Jackster', 'j@test.dk', 1250);
 
-INSERT INTO esport.tournaments(name, game, max_players, start_date) 
+INSERT INTO esport.tournaments(name, game, max_players, start_date)
 VALUES
 ('Free Fire', 'CS', 100, '2025-03-10 12:00:00'),
 ('COBX Masters', 'LOL', 325, '2025-06-20 20:00:00'),
@@ -457,6 +458,7 @@ Test code:
         ConcurrencyControl.handleTournamentRegistrations(4, 1);
     }
 ```
+
 Try to register player 4 to tournament 1. Which has a max player count of 6 and already 6 other players participating.
 
 Expected result: Player 4 will not be registered and the update to his ranking will be rolled back.
@@ -500,19 +502,19 @@ CREATE DEFINER=`devtester`@`%` PROCEDURE `submitMatchResult2`(
 BEGIN
 	DECLARE p_player1_id INT;
     DECLARE p_player2_id INT;
-	
+
     START TRANSACTION;
-    
+
     SELECT player1_id, player2_id
     INTO p_player1_id, p_player2_id
     FROM matches
     WHERE match_id = p_match_id;
-    
+
     IF p_winner_id = p_player1_id or p_winner_id = p_player2_id THEN
         UPDATE matches
         SET winner_id = p_winner_id
         WHERE match_id = p_match_id;
-        
+
         if p_winner_id = p_player1_id then
 			update players set ranking = ranking + 10 where player_id = p_player1_id;
 			update players set ranking = ranking - 10 where player_id = p_player2_id;
@@ -523,7 +525,7 @@ BEGIN
     ELSE
         signal sqlstate '45000' set message_text = 'Winner is not a participant of this match.';
     END IF;
-    
+
     COMMIT;
 
 END
@@ -549,7 +551,7 @@ Test code:
 
 Det forsøges at simulere to samtidige forsøg på at opdatere en match. Det forventede resultat af testen vil være at matchens resultat bliver opdateret 2 gange, og derved får dobbelt ranking. Det skyldes at den pessimistiske metode sørger for at den query, som ikke kom først og derved låste, venter på at den anden query har gjort sit arbejde færdigt, før det gennemføres. Havde det været en rigtig business case, ville der til denne implementation skulle tilføjes sikring mod at den samme spiller ikke får ranking adskillelige gange ved opdatering af den samme match, men dette er der ikke taget højde for i denne implementation.
 
-DB state før test players tabel: 
+DB state før test players tabel:
 
 ![players_state_pre_task4_test.png](concurrency_control%2Fplayers_state_pre_task4_test.png)
 
@@ -561,7 +563,7 @@ DB state efter test:
 
 ![task4_post_test_players_state.png](concurrency_control%2Ftask4_post_test_players_state.png)
 
-Spillerens ranking blev opdateret to gange, da begge queries blev gennemført. Den stiger dog dobbelt op, da der ved tidligere lejlighed har været implementeret denen trigger, til at håndtere samme implementering: 
+Spillerens ranking blev opdateret to gange, da begge queries blev gennemført. Den stiger dog dobbelt op, da der ved tidligere lejlighed har været implementeret denen trigger, til at håndtere samme implementering:
 
 ```sql
 DELIMITER //
@@ -569,13 +571,13 @@ create trigger afterInsertMatch
 after update on matches
 for each row
 begin
-    
+
     DECLARE player1_ranking INT;
     DECLARE player2_ranking INT;
-    
+
     SELECT RANKING INTO player1_ranking FROM players WHERE player_id = new.player1_id;
     SELECT RANKING INTO player2_ranking FROM players WHERE player_id = new.player2_id;
-    
+
     if new.winner_id = new.player1_id then
 		update players set ranking = ranking + 10 where player_id = new.player1_id;
         if player2_ranking >= 10 then
@@ -676,7 +678,7 @@ END
 
 DB state før test:
 
-Tournament: 
+Tournament:
 
 ![tournament_state_pre_task5_test.png](concurrency_control%2Ftournament_state_pre_task5_test.png)
 
@@ -697,7 +699,7 @@ Tournament_registrations:
 ![task5_registration_state_post_test.png](concurrency_control%2Ftask5_registration_state_post_test.png)
 
 Kun 1 spiller blev altså tilmeldt. Den anden blev afvist, da turneringen allerede var fuld.
-Denne implementation virker dog ikke hvis registrerings queries ankommer nøjagtigt samtidigt, da de derved vil gå igennem før de kan se at turneringen er fuld. Dette kunne løses ved at implementere en pessimistisk metode, hvor der laves en lock på turneringen, inden tjekket vedrørende plads i turneringen registrere at en anden spiller også har registreret sig. Det bør derfor overvejes om der alligevel burde tages en mere pessimistisk tilgang. 
+Denne implementation virker dog ikke hvis registrerings queries ankommer nøjagtigt samtidigt, da de derved vil gå igennem før de kan se at turneringen er fuld. Dette kunne løses ved at implementere en pessimistisk metode, hvor der laves en lock på turneringen, inden tjekket vedrørende plads i turneringen registrere at en anden spiller også har registreret sig. Det bør derfor overvejes om der alligevel burde tages en mere pessimistisk tilgang.
 
 ### 6.0 Compare Optimistic vs. Pessimistic Concurrency Control
 
@@ -760,7 +762,7 @@ public static void performanceTestPessimisticTracker(int threads) throws Interru
         executor.shutdown();
 
         try {
-            if (!executor.awaitTermination(10, TimeUnit.SECONDS)) { 
+            if (!executor.awaitTermination(10, TimeUnit.SECONDS)) {
                 System.out.println("Some tasks did not finish in time.");
             }
         } catch (InterruptedException e) {
@@ -774,16 +776,16 @@ public static void performanceTestPessimisticTracker(int threads) throws Interru
 ##### 10 threads
 
 | Metric                   | Optimistic  | Pessimistic |
-|--------------------------|-------------|-------------|
+| ------------------------ | ----------- | ----------- |
 | Execution Time (ms)      | 1509 - 1686 | 1755 - 2897 |
 | Transaction Success Rate | 1 of 10     | 10 of 10    |
 | Lock Contention          | NONE        | HIGH        |
-| Best use case            | READ-HEAVY  | WRITE-HEAVY       |    
+| Best use case            | READ-HEAVY  | WRITE-HEAVY |
 
 ##### 50 threads
 
 | Metric                   | Optimistic  | Pessimistic |
-|--------------------------|-------------|-------------|
+| ------------------------ | ----------- | ----------- |
 | Execution Time (ms)      | 2047 - 2884 | 1874 - 7053 |
 | Transaction Success Rate | 1 of 50     | 50 of 50    |
 | Lock Contention          | NONE        | HIGH        |
@@ -795,4 +797,369 @@ Det afhænger i høj grad af business casen om det giver bedst mening at benytte
 
 ## Part 2a Denormalization & Partitions
 
+#### Exercise 1: Denormalizing Total Sales per Order
+
+-- Vi skal starte med at oprette vores database:
+
+```
+create database globalonlinestore;
+```
+
+Herefter kører vi de scripts, som opretter vores tabeller, som normalisererede:
+
+```
+CREATE TABLE Orders (
+    order_id INT PRIMARY KEY AUTO_INCREMENT,
+    customer_id INT,
+    order_date DATE
+);
+
+CREATE TABLE OrderDetails (
+    order_detail_id INT PRIMARY KEY AUTO_INCREMENT,
+    order_id INT,
+    product_id INT,
+    quantity INT,
+    price DECIMAL(10,2),
+    FOREIGN KEY (order_id) REFERENCES Orders(order_id)
+);
+```
+
+Vi har nu vores 2 tables orders og orderDetails. Nu kan vi oprette en total_amount for vores orders, så vi nemmere kan få totalen ud effektivt igennem orders tabellen.
+
+```
+ALTER TABLE Orders ADD COLUMN total_amount DECIMAL(10,2);
+
+UPDATE Orders o
+SET total_amount = (
+    SELECT SUM(quantity * price)
+    FROM OrderDetails
+    WHERE order_id = o.order_id
+);
+```
+
+##### What are the performance benefits of this approach?
+
+##### How should we ensure the total_amount stays accurate when an order is updated?
+
+Først og fremmest, så er det mere effektivt for vores system at have vores total_amount i order tabellen, da det ikke vil kræve nogle joins, når vi vil have totalen for en order. Dette kan være vigtigt, da det er en meget essentiel read, der i princippet vil ske meget i en online butik.
+Derudover simplificerer det også vores read queries.
+
+På den anden side, så kan det være besværligt at opdatere vores total_amount, hvis vi ikke implementerer nogle smarte triggers eller stored procedures, som kører når vi opdaterer vores orders eller orderdetails.
+Det er derfor vigtigt at vi får implementeret en trigger, der opdaterer vores totalamount når vi ændrer på dataen.
+
+Vi indsætter nu noget dummmy data:
+
+```
+INSERT INTO Orders (customer_id, order_date) VALUES
+(1, '2024-03-01'),
+(2, '2024-03-02'),
+(3, '2024-03-03'),
+(1, '2024-03-04'),
+(2, '2024-03-05');
+```
+
+Man skal nu sørge for at indsætte korrekte autoinkrementerede id i den næste insert for OrderDetails:
+
+```
+INSERT INTO OrderDetails (order_id, product_id, quantity, price) VALUES
+(21, 101, 2, 19.99),  -- Order 1
+(21, 102, 1, 49.99),
+(22, 103, 3, 15.50),  -- Order 2
+(22, 104, 2, 9.99),
+(23, 101, 1, 19.99),  -- Order 3
+(23, 105, 5, 5.99),
+(24, 102, 2, 49.99),  -- Order 4
+(25, 103, 4, 15.50);  -- Order 5
+```
+
+Nu når vi henter vores orders ud får vi følgende output:
+![alt text](concurrency_control/output1.png)
+Vi kan derfor køre vores update, som opdaterer vores total_amount:
+
+```
+UPDATE Orders o
+SET total_amount = (
+    SELECT SUM(quantity * price)
+    FROM OrderDetails
+    WHERE order_id = o.order_id
+);
+```
+
+![alt text](concurrency_control/output2.png)
+
+#### Exercise 2: Denormalizing Customer Data in Orders
+
+##### a) Modify the Orders table to embed customer details.
+
+Vi kører følgende kode:
+
+```
+CREATE TABLE Customers (
+    customer_id INT PRIMARY KEY,
+    name VARCHAR(100),
+    email VARCHAR(100)
+);
+
+CREATE TABLE Orders (
+    order_id INT PRIMARY KEY AUTO_INCREMENT,
+    customer_id INT,
+    order_date DATE,
+    FOREIGN KEY (customer_id) REFERENCES Customers(customer_id)
+);
+```
+
+Og får outputtet:
+
+```
+Error Code: 1050. Table 'orders' already exists
+```
+
+Vi dropper derfor vores tables og kører koden igen.
+
+Vi kan nu køre næste del:
+
+```
+ALTER TABLE Orders ADD COLUMN customer_name VARCHAR(100);
+ALTER TABLE Orders ADD COLUMN customer_email VARCHAR(100);
+
+UPDATE Orders o
+JOIN Customers c ON o.customer_id = c.customer_id
+SET o.customer_name = c.name, o.customer_email = c.email;
+```
+
+##### When would this denormalization be useful?
+
+Denormaliseringen vil være meget smart, når vi ofte skal hente ordreoplysninger sammen med kundens navn og e-mail.
+Derudover forbedrer vi også vores performance, da vi ikke skal lave flere joins, når vi loader data ud af DB.
+Derudover vil det også være smart når historiske data ikke behøver at blive opdateret, f.eks. hvis kundens oplysninger kun er relevante på ordretidspunktet.
+
+##### How should updates to Customers be handled in this case?
+
+Hvis en kundes navn eller e-mail ændres i Customers, forbliver værdierne i Orders uforandrede, medmindre vi manuelt opdaterer dem, og vi skal derfor bruge triggers for at opdatere dataen i alle vores tabeller, fx når man ændrer i customer data.
+
+#### Exercise 3: Using Partitioning for Sales Data
+
+Først laver vi vores tables:
+
+```
+CREATE TABLE Sales (
+    sale_id INT NOT NULL,
+    region_id INT NOT NULL,
+    sale_date DATE NOT NULL,
+    total DECIMAL(10,2) NOT NULL
+)
+PARTITION BY RANGE (YEAR(sale_date)) (
+    PARTITION p2021 VALUES LESS THAN (2022),
+    PARTITION p2022 VALUES LESS THAN (2023),
+    PARTITION p2023 VALUES LESS THAN (2024)
+);
+
+```
+
+Vi indsætter derefter dummy data fra følgende CSV i mysql workbench:
+
+https://github.com/Tine-m/final-assignment/blob/main/sales_partitioned.csv
+
+Jeg prøver at trække sales ud, for at se om dataen blev korrekt indsat:
+
+```
+SELECT * from sales;
+```
+
+```
+1000 row(s) returned
+```
+
+Eftersom vores data er blevet indsat, så kan vi køre vores queries:
+
+```
+10:31:32	SELECT * FROM Sales PARTITION (p2022) WHERE region_id = 5 LIMIT 0, 1000	66 row(s) returned	0.015 sec / 0.000 sec
+```
+
+Og
+
+```
+10:30:50	SELECT * FROM Sales WHERE region_id = 5 LIMIT 0, 1000	207 row(s) returned	0.016 sec / 0.000 sec
+```
+
+##### How does partitioning improve query speed?
+
+Ved at opdele data i separate partitioner (baseret på år) kan databasen hurtigere finde relevante data, da den ikke behøver at scanne hele tabellen.
+Hvis vi er interesserede i data fra et specifikt år, så kan vi springe alt data over, som ikke er fra dette år, hvilket er meget mere effektivt.
+
+##### Why does MySQL not allow foreign keys in partitioned tables?
+
+Foreign keys kræver indlæsning af data på tværs af vores partitioner, hvilket ikke kan lade sig gøre, og det ville i princippet ødelægge partitioner, som er lavet til at begrænse dataindlæsningen til det relevante.
+
+##### What happens when a new year starts?
+
+Vi skal tilføje en ny partition, ellers så bliver dataen ikke partitioneret for disse år.
+
+#### Exercise 4: Using List Partitioning for Regional Data
+
+Vi skal nu droppe vores sales table for at kunne køre næste del.
+
+```
+CREATE TABLE Sales (
+    sale_id INT NOT NULL,
+    region VARCHAR(10) NOT NULL,
+    sale_date DATE NOT NULL,
+    total DECIMAL(10,2) NOT NULL
+)
+PARTITION BY LIST COLUMNS (region) (
+    PARTITION pUS VALUES IN ('US'),
+    PARTITION pEU VALUES IN ('EU'),
+    PARTITION pASIA VALUES IN ('Asia')
+);
+```
+
+Vi indsætter også test data fra følgende link: https://github.com/Tine-m/final-assignment/blob/main/sales_list_partitioned.csv
+
+Vi kan nu køre querien:
+
+```
+10:46:53	EXPLAIN SELECT * FROM Sales PARTITION (pEU) WHERE sale_date BETWEEN '2023-01-01' AND '2023-12-31'	1 row(s) returned	0.000 sec / 0.000 sec
+```
+
+##### What types of queries does list partitioning optimize?
+
+Specifikt er det godt til optimisering af select queries.
+list partitionering er utrolig effektivt når vi søger efter data opdelt i specifikke kategorier. Det er derfor smart i vores tilfælde, da vores sales er opdelt efter geografiske områder. Hvis man derfor kun er interesserede i salgsdata fra et specifikt sted, så vil man kunne søge efter dette utrolig hurtigt.
+
+##### What if a new region needs to be added?
+
+Så skal vi ind og manuelt oprette regionen, da det ikke automatisk oprettes - og hvis vi prøver at indsætte data med en region der ikke findes i systemet, så bliver vores query afvist.
+
+##### How does list partitioning compare to range partitioning?
+
+liste partitionering er smart til kategoriske værdier, såsom regioner, lande osv.
+Range partitionering er smart til at opdele numeriske værdier i "ranges", såsom datoer, årstal osv.
+
+#### Exercise 5: Checking Query Performance with Partitioning
+
+We use the Sales table partitioned by region:
+
+```
+CREATE TABLE Sales (
+    sale_id INT NOT NULL,
+    region VARCHAR(10) NOT NULL,
+    sale_date DATE NOT NULL,
+    total DECIMAL(10,2) NOT NULL
+)
+PARTITION BY LIST COLUMNS (region) (
+    PARTITION pUS VALUES IN ('US'),
+    PARTITION pEU VALUES IN ('EU'),
+    PARTITION pASIA VALUES IN ('Asia')
+);
+```
+
+#### 📌 2. Running EXPLAIN ANALYZE
+
+```
+EXPLAIN ANALYZE
+SELECT * FROM Sales
+WHERE region = 'EU'
+AND sale_date BETWEEN '2023-01-01' AND '2023-12-31';
+```
+
+```
+-> Filter: ((sales.region = 'EU') and (sales.sale_date between '2023-01-01' and '2023-12-31'))  (cost=34.15 rows=4) (actual time=0.077..1.346 rows=116 loops=1)
+    -> Table scan on Sales  (cost=34.15 rows=339) (actual time=0.043..0.806 rows=339 loops=1)
+
+```
+
+#### 📌 3. Running EXPLAIN ANALYZE With Partition Selection
+
+```
+EXPLAIN ANALYZE
+SELECT * FROM Sales PARTITION (pEU)
+WHERE sale_date BETWEEN '2023-01-01' AND '2023-12-31';
+```
+
+```
+-> Filter: (sales.sale_date between '2023-01-01' and '2023-12-31')  (cost=34.15 rows=38) (actual time=0.061..1.007 rows=116 loops=1)
+    -> Table scan on Sales  (cost=34.15 rows=339) (actual time=0.037..0.659 rows=339 loops=1)
+```
+
+Som man kan se, så scanner de begge 339 rows, hvilket ikke er det forventede resultat.
+Dette er fordi at når vi har defineret en partition, og så søger baseret på dette, fx "WHERE Region = EU", så vil mysql automatisk se at der findes en partition baseret på denne kolonne, og så søge baseret på dette.
+
+Dette gør at vi ikke kommer til at scanne alle 1000 rows igennem. Vi fjerner derfor vores partitions, for at kunne få et sammenligneligt resultat. Til dette bruger vi følgende script:
+
+```
+-- Step 1: Drop the existing partitioning
+ALTER TABLE Sales REMOVE PARTITIONING;
+/*
+-- Step 2: Recreate the partitioning by region (LIST partitioning example)
+ALTER TABLE Sales
+PARTITION BY LIST COLUMNS (region) (
+    PARTITION pUS VALUES IN ('US'),
+    PARTITION pEU VALUES IN ('EU'),
+    PARTITION pASIA VALUES IN ('Asia')
+);
+*/
+```
+
+Nu får vi følgende output:
+
+```
+-> Filter: ((sales.region = 'EU') and (sales.sale_date between '2023-01-01' and '2023-12-31'))  (cost=101.25 rows=11) (actual time=0.780..2.414 rows=116 loops=1)
+    -> Table scan on Sales  (cost=101.25 rows=1000) (actual time=0.045..1.767 rows=1000 loops=1)
+
+```
+
+Vi får derfor en cost på 101 kontra 34, hvilket giver mening, da vi søger igennem 3 gange så mange rows.
+
+#### 📌 4. Key Metrics to Compare
+
+| Metric           | Without Partitioning | With Partitioning                   |
+| ---------------- | -------------------- | ----------------------------------- |
+| Rows Examined    | 1000                 | 339                                 |
+| Execution Time   | 0.045-1.767 sec      | 0.037-0.659 sec                     |
+| Index Usage      | MAY USE INDEX        | Efficient indexing within partition |
+| Query Complexity | More costly joins    | Simpler & optimized                 |
+
+#### 📌 5. Viewing Query Execution Plan in MySQL Workbench
+
+Jeg kører følgende query og finder execution plan:
+
+```
+ SELECT * FROM Sales WHERE region = 'EU' AND sale_date BETWEEN '2023-01-01' AND '2023-12-31';
+```
+
+![alt text](concurrency_control/fullscan.png)
+
+Her kan man se vores cost være 101, og vi scanner 1000 rows = full table scan.
+
+Nu kører jeg med partition:
+
+```
+ SELECT * FROM Sales partition (pEU)
+ WHERE sale_date BETWEEN '2023-01-01' AND '2023-12-31';
+```
+
+![alt text](concurrency_control/partitionscan.png)
+
+mysql Workbench registrer det som et full table scan, selvom vi kun søger i vores partition.
+Vi søger kun igennem 339 rows med en cost på 34.15.
+
+#### 📌 6. Alternative: Using FORMAT=JSON for Readability
+
+```
+'{\n  \"query_block\": {\n    \"select_id\": 1,\n    \"cost_info\": {\n      \"query_cost\": \"101.25\"\n    },\n    \"table\": {\n      \"table_name\": \"Sales\",\n      \"access_type\": \"ALL\",\n      \"rows_examined_per_scan\": 1000,\n      \"rows_produced_per_join\": 11,\n      \"filtered\": \"1.11\",\n      \"cost_info\": {\n        \"read_cost\": \"100.14\",\n        \"eval_cost\": \"1.11\",\n        \"prefix_cost\": \"101.25\",\n        \"data_read_per_join\": \"622\"\n      },\n      \"used_columns\": [\n        \"sale_id\",\n        \"region\",\n        \"sale_date\",\n        \"total\"\n      ],\n      \"attached_condition\": \"((`globalonlinestore`.`sales`.`region` = \'EU\') and (`globalonlinestore`.`sales`.`sale_date` between \'2023-01-01\' and \'2023-12-31\'))\"\n    }\n  }\n}'
+
+```
+
 ## Part 2b Query Optimization
+
+#### Exercise 1: Optimizing a Subquery into a Join
+
+```
+EXPLAIN
+SELECT o.order_id,
+       o.total_amount,
+       c.name AS customer_name
+FROM Orders o
+JOIN Customers c ON o.customer_id = c.customer_id
+WHERE o.total_amount > 100;
+```
