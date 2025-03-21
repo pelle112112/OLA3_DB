@@ -797,7 +797,7 @@ Det afhænger i høj grad af business casen om det giver bedst mening at benytte
 
 ## Part 2a Denormalization & Partitions
 
-#### Exercise 1: Denormalizing Total Sales per Order
+### Exercise 1: Denormalizing Total Sales per Order
 
 -- Vi skal starte med at oprette vores database:
 
@@ -841,11 +841,10 @@ SET total_amount = (
 
 ##### How should we ensure the total_amount stays accurate when an order is updated?
 
-Først og fremmest, så er det mere effektivt for vores system at have vores total_amount i order tabellen, da det ikke vil kræve nogle joins, når vi vil have totalen for en order. Dette kan være vigtigt, da det er en meget essentiel read, der i princippet vil ske meget i en online butik.
+Først og fremmest, så er det mere effektivt for vores system at have vores total_amount i order tabellen, da det ikke vil kræve nogle joins, når vi vil have totalen for en order. Udover dette sparer vi ressourcer eftersom totalen ikke skal udregnes hver gang vi skal bruge den. Dette kan være vigtigt, da det er en meget essentiel read, der i princippet vil ske meget i en online butik.
 Derudover simplificerer det også vores read queries.
 
-På den anden side, så kan det være besværligt at opdatere vores total_amount, hvis vi ikke implementerer nogle smarte triggers eller stored procedures, som kører når vi opdaterer vores orders eller orderdetails.
-Det er derfor vigtigt at vi får implementeret en trigger, der opdaterer vores totalamount når vi ændrer på dataen.
+På den anden side, bliver det vanskeligere at sikre datakonsistens, hvis ikke der implementeres en række smarte triggers eller stored procedures, som kører når vi opdaterer vores orders eller orderdetails. Dette skyldes at total_amount til enhver tid skal holdes ajour med ændringer i orderDetails tabellen. Udover det kan  det være værd at tænke på om performance fordelene opvejer at der i teorien gemmes redundant data, som potentielt kan komme til at fylde relativt meget, hvis det antages at orders tabellen potentielt kan blive uendeligt stor.
 
 Vi indsætter nu noget dummmy data:
 
@@ -873,7 +872,9 @@ INSERT INTO OrderDetails (order_id, product_id, quantity, price) VALUES
 ```
 
 Nu når vi henter vores orders ud får vi følgende output:
+
 ![alt text](concurrency_control/output1.png)
+
 Vi kan derfor køre vores update, som opdaterer vores total_amount:
 
 ```
@@ -887,7 +888,7 @@ SET total_amount = (
 
 ![alt text](concurrency_control/output2.png)
 
-#### Exercise 2: Denormalizing Customer Data in Orders
+### Exercise 2: Denormalizing Customer Data in Orders
 
 ##### a) Modify the Orders table to embed customer details.
 
@@ -937,7 +938,7 @@ Derudover vil det også være smart når historiske data ikke behøver at blive 
 
 Hvis en kundes navn eller e-mail ændres i Customers, forbliver værdierne i Orders uforandrede, medmindre vi manuelt opdaterer dem, og vi skal derfor bruge triggers for at opdatere dataen i alle vores tabeller, fx når man ændrer i customer data.
 
-#### Exercise 3: Using Partitioning for Sales Data
+### Exercise 3: Using Partitioning for Sales Data
 
 Først laver vi vores tables:
 
@@ -960,7 +961,7 @@ Vi indsætter derefter dummy data fra følgende CSV i mysql workbench:
 
 https://github.com/Tine-m/final-assignment/blob/main/sales_partitioned.csv
 
-Jeg prøver at trække sales ud, for at se om dataen blev korrekt indsat:
+Sales trækkes ud, for at se om dataen blev korrekt indsat:
 
 ```
 SELECT * from sales;
@@ -995,7 +996,7 @@ Foreign keys kræver indlæsning af data på tværs af vores partitioner, hvilke
 
 Vi skal tilføje en ny partition, ellers så bliver dataen ikke partitioneret for disse år.
 
-#### Exercise 4: Using List Partitioning for Regional Data
+### Exercise 4: Using List Partitioning for Regional Data
 
 Vi skal nu droppe vores sales table for at kunne køre næste del.
 
@@ -1032,12 +1033,13 @@ Så skal vi ind og manuelt oprette regionen, da det ikke automatisk oprettes - o
 
 ##### How does list partitioning compare to range partitioning?
 
-liste partitionering er smart til kategoriske værdier, såsom regioner, lande osv.
-Range partitionering er smart til at opdele numeriske værdier i "ranges", såsom datoer, årstal osv.
+De adskiller sig ved at list partitioning opdeler data baseret på en række forud definerede værdier, i denne case regioner, hvorimod range partitioning beskæftiger sig med continuous ranges af værdier, i denne case årstal.
 
-#### Exercise 5: Checking Query Performance with Partitioning
+List er derved effektivt når der er tale om equals queries, hvorimod range er effektivt når der er tale om range queries.
 
-We use the Sales table partitioned by region:
+### Exercise 5: Checking Query Performance with Partitioning
+
+Vi tager udgangspunkt i Sales tabellen med list partitioning af regioner.
 
 ```
 CREATE TABLE Sales (
@@ -1145,9 +1147,34 @@ Vi søger kun igennem 339 rows med en cost på 34.15.
 
 #### 📌 6. Alternative: Using FORMAT=JSON for Readability
 
-```
-'{\n  \"query_block\": {\n    \"select_id\": 1,\n    \"cost_info\": {\n      \"query_cost\": \"101.25\"\n    },\n    \"table\": {\n      \"table_name\": \"Sales\",\n      \"access_type\": \"ALL\",\n      \"rows_examined_per_scan\": 1000,\n      \"rows_produced_per_join\": 11,\n      \"filtered\": \"1.11\",\n      \"cost_info\": {\n        \"read_cost\": \"100.14\",\n        \"eval_cost\": \"1.11\",\n        \"prefix_cost\": \"101.25\",\n        \"data_read_per_join\": \"622\"\n      },\n      \"used_columns\": [\n        \"sale_id\",\n        \"region\",\n        \"sale_date\",\n        \"total\"\n      ],\n      \"attached_condition\": \"((`globalonlinestore`.`sales`.`region` = \'EU\') and (`globalonlinestore`.`sales`.`sale_date` between \'2023-01-01\' and \'2023-12-31\'))\"\n    }\n  }\n}'
-
+```json
+{
+  "query_block": {
+    "select_id": 1,
+    "cost_info": {
+      "query_cost":"101.25"
+    },
+    "table": {      
+      "table_name": "Sales",
+      "access_type": "ALL",
+      "rows_examined_per_scan": 1000, 
+      "rows_produced_per_join": 11,
+      "filtered": "1.11",
+      "cost_info": {        "read_cost": "100.14",
+        "eval_cost": "1.11",
+        "prefix_cost": "101.25",
+        "data_read_per_join": "622"
+      },
+      "used_columns": [        
+        "sale_id",
+        "region",
+        "sale_date",
+        "total"
+      ],
+      "attached_condition": "((`globalonlinestore`.`sales`.`region` = 'EU') and (`globalonlinestore`.`sales`.`sale_date` between '2023-01-01' and '2023-12-31'))"
+    }
+  }
+}
 ```
 
 ## Part 2b Query Optimization
