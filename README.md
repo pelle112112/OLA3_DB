@@ -797,7 +797,7 @@ Det afhænger i høj grad af business casen om det giver bedst mening at benytte
 
 ## Part 2a Denormalization & Partitions
 
-### Exercise 1: Denormalizing Total Sales per Order
+### 2a.1. Denormalizing Total Sales per Order
 
 -- Vi skal starte med at oprette vores database:
 
@@ -888,7 +888,7 @@ SET total_amount = (
 
 ![alt text](concurrency_control/output2.png)
 
-### Exercise 2: Denormalizing Customer Data in Orders
+### 2a.2. Denormalizing Customer Data in Orders
 
 ##### a) Modify the Orders table to embed customer details.
 
@@ -938,7 +938,7 @@ Derudover vil det også være smart når historiske data ikke behøver at blive 
 
 Hvis en kundes navn eller e-mail ændres i Customers, forbliver værdierne i Orders uforandrede, medmindre vi manuelt opdaterer dem, og vi skal derfor bruge triggers for at opdatere dataen i alle vores tabeller, fx når man ændrer i customer data.
 
-### Exercise 3: Using Partitioning for Sales Data
+### 2a.3. Using Partitioning for Sales Data
 
 Først laver vi vores tables:
 
@@ -996,7 +996,7 @@ Foreign keys kræver indlæsning af data på tværs af vores partitioner, hvilke
 
 Vi skal tilføje en ny partition, ellers så bliver dataen ikke partitioneret for disse år.
 
-### Exercise 4: Using List Partitioning for Regional Data
+### 2a.4. Using List Partitioning for Regional Data
 
 Vi skal nu droppe vores sales table for at kunne køre næste del.
 
@@ -1037,7 +1037,7 @@ De adskiller sig ved at list partitioning opdeler data baseret på en række for
 
 List er derved effektivt når der er tale om equals queries, hvorimod range er effektivt når der er tale om range queries.
 
-### Exercise 5: Checking Query Performance with Partitioning
+### 2a.5. Checking Query Performance with Partitioning
 
 Vi tager udgangspunkt i Sales tabellen med list partitioning af regioner.
 
@@ -1055,7 +1055,7 @@ PARTITION BY LIST COLUMNS (region) (
 );
 ```
 
-#### 📌 2. Running EXPLAIN ANALYZE
+#### Running EXPLAIN ANALYZE
 
 ```
 EXPLAIN ANALYZE
@@ -1070,7 +1070,7 @@ AND sale_date BETWEEN '2023-01-01' AND '2023-12-31';
 
 ```
 
-#### 📌 3. Running EXPLAIN ANALYZE With Partition Selection
+#### Running EXPLAIN ANALYZE With Partition Selection
 
 ```
 EXPLAIN ANALYZE
@@ -1112,7 +1112,7 @@ Nu får vi følgende output:
 
 Vi får derfor en cost på 101 kontra 34, hvilket giver mening, da vi søger igennem 3 gange så mange rows.
 
-#### 📌 4. Key Metrics to Compare
+#### Key Metrics to Compare
 
 | Metric           | Without Partitioning | With Partitioning                   |
 | ---------------- | -------------------- | ----------------------------------- |
@@ -1121,7 +1121,7 @@ Vi får derfor en cost på 101 kontra 34, hvilket giver mening, da vi søger ige
 | Index Usage      | MAY USE INDEX        | Efficient indexing within partition |
 | Query Complexity | More costly joins    | Simpler & optimized                 |
 
-#### 📌 5. Viewing Query Execution Plan in MySQL Workbench
+#### Viewing Query Execution Plan in MySQL Workbench
 
 Jeg kører følgende query og finder execution plan:
 
@@ -1145,7 +1145,7 @@ Nu kører jeg med partition:
 mysql Workbench registrer det som et full table scan, selvom vi kun søger i vores partition.
 Vi søger kun igennem 339 rows med en cost på 34.15.
 
-#### 📌 6. Alternative: Using FORMAT=JSON for Readability
+#### 📌 2a.6. Alternative: Using FORMAT=JSON for Readability
 
 ```json
 {
@@ -1179,10 +1179,20 @@ Vi søger kun igennem 339 rows med en cost på 34.15.
 
 ## Part 2b Query Optimization
 
-#### Exercise 1: Optimizing a Subquery into a Join
+### 2b.1 Optimizing a Subquery into a Join
 
+Denne query skal laves om fra en subquery til en join:
+
+```sql
+SELECT order_id, total_amount,
+       (SELECT name FROM Customers WHERE customer_id = Orders.customer_id) AS customer_name
+FROM Orders
+WHERE total_amount > 100;
 ```
-EXPLAIN
+
+Der joines på customer id'et i customers tabellen: 
+
+```sql
 SELECT o.order_id,
        o.total_amount,
        c.name AS customer_name
@@ -1190,3 +1200,241 @@ FROM Orders o
 JOIN Customers c ON o.customer_id = c.customer_id
 WHERE o.total_amount > 100;
 ```
+
+For at få et mere retvisende billede af performance forskellene mellem de to queries, er følgende sql script kørt for at få noget dummy data:
+
+```sql
+-- Insert 100 Customers
+INSERT INTO Customers (customer_id, name, email)
+SELECT 
+    FLOOR(RAND() * 1000000) AS customer_id, -- Random customer_id
+    CONCAT('Customer', id) AS name,
+    CONCAT('customer', id, '@example.com') AS email
+FROM (SELECT ROW_NUMBER() OVER () AS id FROM INFORMATION_SCHEMA.COLUMNS LIMIT 100) AS t;
+
+-- Insert 200 Orders
+INSERT INTO Orders (customer_id, order_date)
+SELECT 
+    (SELECT customer_id FROM Customers ORDER BY RAND() LIMIT 1), -- Random existing customer_id
+    NOW() - INTERVAL FLOOR(RAND() * 365) DAY -- Random date within the last year
+FROM (SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4 UNION ALL SELECT 5
+      UNION ALL SELECT 6 UNION ALL SELECT 7 UNION ALL SELECT 8 UNION ALL SELECT 9 UNION ALL SELECT 10
+      UNION ALL SELECT 11 UNION ALL SELECT 12 UNION ALL SELECT 13 UNION ALL SELECT 14 UNION ALL SELECT 15
+      UNION ALL SELECT 16 UNION ALL SELECT 17 UNION ALL SELECT 18 UNION ALL SELECT 19 UNION ALL SELECT 20) AS t1,
+     (SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4 UNION ALL SELECT 5
+      UNION ALL SELECT 6 UNION ALL SELECT 7 UNION ALL SELECT 8 UNION ALL SELECT 9 UNION ALL SELECT 10) AS t2
+LIMIT 200;
+
+UPDATE Orders
+SET total_amount = ROUND(50 + (RAND() * 100), 2);
+```
+
+Der bliver genereret 100 customers og 200 orders med en total_amount mellem 50 og 150.
+
+Dette er query stats og execution plan for den originale query:
+
+![task1_originalQ_stats.png](query_optimization%2Ftask1_originalQ_stats.png)
+
+![task1_originalQ_plan.png](query_optimization%2Ftask1_originalQ_plan.png)
+
+Dette er query stats og execution plan for den nye query:
+
+![task1_newQ_stats.png](query_optimization%2Ftask1_newQ_stats.png)
+
+![task1_newQ_plan.png](query_optimization%2Ftask1_newQ_plan.png)
+
+#### Sammenligning:
+
+| Metric                  | Original Query | New Query |
+|-------------------------|----------------|-----------|
+| Rows Examined           | 314            | 314       |
+| Execution Time (server) | 0.00137        | 0.00112   |
+
+Querien med joinet viser sig altså at performe bedre. Dette skyldes at den originale query kører en subquery for hver row i orders tabellen, hvilket er meget ineffektivt. Joinet derimod, kører kun en join, hvilket er mere effektivt. Det må formodes at forskellen i execution time ville blive større jo mere data der er til stede i tabellerne, da subqueries ville blive kørt flere gange.
+
+### 2b.2 Optimizing a JOIN by Using an Index
+
+Denne query skal optimeres ved at bruge et index på customer id i orders tabellen:
+
+```sql
+SELECT o.order_id, o.total_amount, c.name
+FROM Orders o
+JOIN Customers c ON o.customer_id = c.customer_id
+WHERE o.order_date > '2024-09-01';
+```
+
+OBS. datoen er ændret til 2024-09-01, for bedre at matche dummy dataen, der kun går et år tilbage.
+
+Performance og execution plan for den originale query:
+
+![task2_originalQ_stats.png](query_optimization%2Ftask2_originalQ_stats.png)
+
+![task2_originalQ_plan.png](query_optimization%2Ftask2_originalQ_plan.png)
+
+Der oprettes et index på customer_id i orders tabellen ved denne query:
+
+```sql
+CREATE INDEX idx_customer_id ON Orders (customer_id);
+```
+
+Performance og execution plan for querien efter index er oprettet:
+
+![task2_newQ_stats.png](query_optimization%2Ftask2_newQ_stats.png)
+
+![task2_newQ_plan.png](query_optimization%2Ftask2_newQ_plan.png)
+
+#### Sammenligning:
+
+Under denne opgave opstod en række problemer. Det første problem var at customer_id i orders tabellen allerede var en fremmednøgle og dermed indekseret. Det blev derfor forsøgt at fjerne fremmednøglen for at skabe et miljø, hvor performance forskellen kunne ses. Efter at have fjernet relationen mellem Orders og Customers, blev det næste problem dog klart. Da et join laves mellem de 2 tabeller og customer_id i Customer allerede er en primærnøgle og derfor indekseret, vil MySQL altid benytte dette index, til at lave sit lookup. Eksemplet blev dog kørt alligevel, og som det fremgår af execution planerne, benyttes Unique Key Lookup på primærnøglen i begge tilfælde, uanset om der er oprettet et index på customer_id i Orders tabellen. På billedet af query stats, kunne det godt fremgå som om at querien performer bedre efter indexet er lavet, men dette er varians, da querien er forsøgt kørt mange gange både med og uden index, hvor resultatet varierede i en grad at det ind imellem for langsommere efter oprettet index. Det må altså konkluderes at MySQL behandler querien på samme måde uanset om der er oprettet et index på customer_id i Orders tabellen eller ej, da den altid vil bruge primærnøglen i Customers tabellen til lookup.
+
+### 2b.3 Identifying and Fixing the N+1 Query Problem
+
+Denne query skaber N+1 problemet:
+
+```sql
+-- Fetch all orders first
+SELECT order_id, customer_id FROM Orders WHERE order_date > '2023-01-01';
+
+-- Then, for each order, fetch customer name separately
+SELECT name FROM Customers WHERE customer_id = 1;
+SELECT name FROM Customers WHERE customer_id = 2;
+SELECT name FROM Customers WHERE customer_id = 3;
+```
+
+Problemet opstår fordi at først laves en query der henter alle ordrer, og derefter laves en query for hver order, der henter kundenavnet. Dette er meget ineffektivt, da der laves en query for hver order. N er altså antallet af rækker, som du ender med at lave forespørgsler på, og derfor får du N+1, da der laves en ekstra forespørgsel, som henter data du vil forespørge på i fremtiden. Problemet kan løses ved at lave en join, og hente al dataen i en enkelt query i stedet.
+
+Denne query løser problemet:
+
+```sql
+SELECT o.order_id, o.customer_id, c.name
+FROM Orders o
+JOIN Customers c ON o.customer_id = c.customer_id
+WHERE o.order_date > '2023-01-01';
+```
+
+Al dataen vil ved denne query blive hentet i en enkelt query, og der vil ikke være behov for at lave en ekstra query for hver order.
+
+### 2b.4 Optimizing Aggregate Queries with Indexes
+
+De 2 tabeller oprettes i DB:
+
+```sql
+CREATE TABLE Products (
+    product_id INT PRIMARY KEY AUTO_INCREMENT,
+    name VARCHAR(100) NOT NULL,
+    category VARCHAR(50) NOT NULL,
+    price DECIMAL(10,2) NOT NULL
+);
+
+CREATE TABLE Sales (
+    sale_id INT PRIMARY KEY AUTO_INCREMENT,
+    product_id INT NOT NULL,
+    quantity INT NOT NULL,
+    sale_date DATE NOT NULL,
+    total_amount DECIMAL(10,2) NOT NULL,
+    FOREIGN KEY (product_id) REFERENCES Products(product_id)
+);
+```
+
+Følgende queries blev brugt for at oprette noget dummy data til de 2 tabeller:
+
+```sql
+INSERT INTO Products (name, category, price)
+SELECT 
+    CONCAT('Product ', LPAD(ROW_NUMBER() OVER (), 3, '0')) AS name,
+    ELT(FLOOR(1 + (RAND() * 5)), 'Electronics', 'Clothing', 'Furniture', 'Toys', 'Books') AS category,
+    ROUND(RAND() * 100 + 10, 2) AS price
+FROM (SELECT 1 FROM dual UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4 UNION ALL 
+      SELECT 5 UNION ALL SELECT 6 UNION ALL SELECT 7 UNION ALL SELECT 8 UNION ALL SELECT 9 UNION ALL SELECT 10) a,
+     (SELECT 1 FROM dual UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4 UNION ALL 
+      SELECT 5 UNION ALL SELECT 6 UNION ALL SELECT 7 UNION ALL SELECT 8 UNION ALL SELECT 9 UNION ALL SELECT 10) b
+LIMIT 100;
+
+INSERT INTO Sales (product_id, quantity, sale_date, total_amount)
+SELECT 
+    p.product_id, 
+    FLOOR(RAND() * 10) + 1 AS quantity,  
+    CURDATE() - INTERVAL FLOOR(RAND() * 365) DAY AS sale_date,  
+    p.price * (FLOOR(RAND() * 10) + 1) AS total_amount
+FROM Products p
+JOIN (
+    SELECT 1 FROM dual UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4 UNION ALL 
+    SELECT 5 UNION ALL SELECT 6 UNION ALL SELECT 7 UNION ALL SELECT 8 UNION ALL 
+    SELECT 9 UNION ALL SELECT 10
+) a
+JOIN (
+    SELECT 1 FROM dual UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4 UNION ALL 
+    SELECT 5 UNION ALL SELECT 6 UNION ALL SELECT 7 UNION ALL SELECT 8 UNION ALL 
+    SELECT 9 UNION ALL SELECT 10
+) b
+LIMIT 1000;
+```
+
+100 unikke produkter og 1000 sales er oprettet.
+
+Dette er den querien der skal optimeres:
+
+```sql
+SELECT p.category, SUM(s.total_amount) AS total_sales
+FROM Sales s
+JOIN Products p ON s.product_id = p.product_id
+GROUP BY p.category;
+```
+
+#### 2b.4.1 Analyze Query Performance
+
+Dette er performance for querien uden nogen optimering:
+
+![task4_originalQ_stats.png](query_optimization%2Ftask4_originalQ_stats.png)
+
+![task4_originalQ_plan.png](query_optimization%2Ftask4_originalQ_plan.png)
+
+Execution stats viser en execution time på 0.0037 og 2000 rows scanned, med en samlet query cost på 451.25.
+Det fremgår af execution planen at der benyttes et index på product_id i products tabellen, da querien benytter primærnøglens index ved joinet.
+
+#### 2b.4.2 Identify Missing Indexes & 2b.4.3 Optimize the Query Using Indexes
+
+Da product_id er en fremmednøgle i Sales tabellen er denne allerede indekseret da MySQL kræver at fremmednøgler er indekseret.
+
+Der kan oprettes et index på category i Products tabellen, da dette er den kolonne der grupperes på i queryen.
+
+```sql
+CREATE INDEX idx_category ON Products (category);
+```
+
+![task4_categoryIndex.png](query_optimization%2Ftask4_categoryIndex.png)
+
+Dette er resultatet når querien køres igen efter tilføjelse af index:
+
+![task4_newQ_categoryIndex_stats.png](query_optimization%2Ftask4_newQ_categoryIndex_stats.png)
+
+![task4_categoryIndex_plan.png](query_optimization%2Ftask4_categoryIndex_plan.png)
+
+Efter tilføjet index på categories i products tabellen, er execution time faldet til 0.0027. Mens execution plan, rows examined og query cost forbliver uændret. Der er altså en performance forbedring men ved uænder cost.
+
+#### 2b.4.4 Bonus: Use a Covering Index
+
+Det forsøges at yderligere optimere querien ved at oprette et covering index på product_id og total_amount i Sales tabellen.
+
+```sql
+CREATE INDEX idx_sales_optimized ON Sales(product_id, total_amount);
+```
+
+Resultat:
+
+![task4_coveringIndex_stats.png](query_optimization%2Ftask4_coveringIndex_stats.png)
+
+![task4_coveringIndex_plan.png](query_optimization%2Ftask4_coveringIndex_plan.png)
+
+Igen forbedres execution time en smule, til 0.0022 mens der ikke er ændringer i query cost eller rows examined. Det ses dog på execution planen at det nye covering index benyttes frem for et full table scan. DBMS vurderer altså at dette er mere effektivt.
+
+#### Sammenligning:
+
+| Metric         | Original Query    | New Query (Category Index) | New Query (Covering Index)                                      |
+|----------------|-------------------|----------------------------|-----------------------------------------------------------------|
+| Rows Examined  | 2000              | 2000                       | 2000                                                            |
+| Query cost     | 451.25            | 451.25                     | 451.25                                                          |
+| Execution time | 0.0037            | 0.0027                     | 0.0022                                                          |
+| Index used     | Primary key index | Primary key index          | Primary key index + covering index (instead of full table scan) |
+
+Der er altså en lille forbedring i execution time ved at oprette et index på category i products tabellen, og en yderligere forbedring ved at oprette et covering index på product_id og total_amount i Sales tabellen.
